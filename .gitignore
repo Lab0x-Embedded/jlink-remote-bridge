@@ -1,10 +1,6 @@
 # ---- 本地配置（不会被提交）----
 .env
 
-# 机器状态快照 / 备份，属于本地现场，不入库
-.segger-*-backup.txt
-.segger-*-hidden.txt
-
 # 其他
 *.log
 .DS_Store

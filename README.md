@@ -84,10 +84,6 @@ cp .env.example .env      # 按需改（.env 已被 gitignore）
 |---|---|
 | `jlink-remote-server.sh` | `start` / `stop` / `status` / `ip` —— 把本机探针通过 IP 暴露出去 |
 | `wsh` | 把本地 PowerShell 脚本灌进远程 Windows 主机执行（详见下方说明） |
-| `segger-links.sh` | `list` / `check` / `minimal` / `restore` —— 精简 `/usr/local/bin` 里 SEGGER 铺的四十多个软链（**需 sudo**） |
-| `segger-apps.sh` | `list` / `check` / `minimal` / `all` / `restore` —— 收起 `/Applications/SEGGER` 里用不到的 GUI `.app`，`all` 就是「启动台里一个 J-Link 图标都不留」（**需 sudo**） |
-
-两个 `segger-*.sh` 都是**先备份、再动手**，且 `check` 模式只打印不改文件；`restore` 可完整回滚。收起 `.app` 用的是"移进以点开头的隐藏目录"而非删除 —— Launchpad / Spotlight 不索引点开头目录，图标消失但文件还在。
 
 ### 配置：`.env`
 
@@ -99,7 +95,7 @@ JLINK_SN=123456789 ./jlink-remote-server.sh start
 WSH_TARGET=user@host ./wsh check.ps1
 ```
 
-`segger-links.sh` / `segger-apps.sh` **故意不读 `.env`** —— 它们以 `sudo` 运行，让 root 去 source 一个用户可写的文件是提权隐患。
+`wsh` 和 `jlink-remote-server.sh` 都是用户态脚本，直接读 `.env`。需要以 `sudo` 运行的操作**不要**把配置放进 `.env` —— 让 root 去 source 一个用户可写的文件是提权隐患，那种场景应改用命令行参数。
 
 ### 关于 `wsh`
 
