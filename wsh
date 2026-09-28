@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# wsh —— 把本地 PowerShell 脚本灌进远程 Windows 主机执行
+#
+# 为什么要这么绕
+#   直接 `ssh win 'powershell -c "..."'` 会同时踩三个坑：
+#     1) 引号地狱 —— 嵌套两层以后基本不可维护
+#     2) 非 ASCII（中文）会被按本地代码页（GBK）解码成乱码
+#     3) 脚本里的 `2>/dev/null` 会被远程 PowerShell 自己解析成
+#        `Out-File C:\dev\null`，报 DirectoryNotFoundException
+#   解法：把脚本转成 UTF-16LE base64，用 powershell -EncodedCommand 执行，
+#   以上三个问题一次性全部绕开。输出侧再补一句 UTF8 的 OutputEncoding，
+#   中文就不会回来变乱码。
+#
+# 用法
+#   ./wsh <local.ps1>
+#   WSH_TARGET=user@host ./wsh check.ps1
+#
+# 配置
+#   WSH_TARGET  ssh 目标：user@host，或 ~/.ssh/config 里配好的别名（必填）
+#   WSH_KEY     私钥路径（用 ssh config 的 IdentityFile 也可，这里留空）
+#   可写进脚本同目录的 .env（见 .env.example）。
+
+set -euo pipefail
+
+_src="${BASH_SOURCE[0]}"
+while [ -L "$_src" ]; do
+  _link="$(readlink "$_src")"
+  case "$_link" in
+    /*) _src="$_link" ;;
+    *)  _src="$(dirname "$_src")/$_link" ;;
+  esac
+done
+SCRIPT_DIR="$(cd "$(dirname "$_src")" && pwd)"
+
+# 加载 .env（真实环境变量优先）
+if [ -f "$SCRIPT_DIR/.env" ]; then
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in ''|\#*) continue ;; esac
+    case "$line" in *=*) ;; *) continue ;; esac
+    k="$(printf '%s' "${line%%=*}" | tr -d '[:space:]')"
+    v="${line#*=}"
+    [ -n "$k" ] || continue
+    eval "cur=\${$k:-}"
+    [ -n "$cur" ] && continue
+    export "$k=$v"
+  done < "$SCRIPT_DIR/.env"
+fi
+
+[ "$#" -ge 1 ] || { echo "用法: $0 <local.ps1>" >&2; exit 1; }
+[ -r "$1" ] || { echo "读不到脚本文件: $1" >&2; exit 1; }
+TARGET="${WSH_TARGET:-}"
+[ -n "$TARGET" ] || { echo "请设置 WSH_TARGET（如 user@host 或 ssh 别名）" >&2; exit 1; }
+
+TMP="${TMPDIR:-/tmp}/.wsh_last.ps1"
+{
+  echo '$ProgressPreference = "SilentlyContinue"'
+  echo '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false'
+  cat "$1"
+} > "$TMP"
+
+B64="$(iconv -f UTF-8 -t UTF-16LE "$TMP" | base64 | tr -d '\n')"
+
+args=(-o ConnectTimeout=10 -o BatchMode=yes)
+if [ -n "${WSH_KEY:-}" ]; then
+  args+=(-i "$WSH_KEY" -o IdentitiesOnly=yes)
+fi
+
+exec ssh "${args[@]}" "$TARGET" \
+  "powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand $B64"
