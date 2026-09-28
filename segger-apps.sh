@@ -16,6 +16,7 @@
 #   sudo ./segger-apps.sh list                       列出所有 GUI .app 及当前状态
 #   sudo ./segger-apps.sh check                      试运行：只打印，不动文件
 #   sudo ./segger-apps.sh minimal [额外要保留的.app…] 保留默认 + 追加的，其余收起
+#   sudo ./segger-apps.sh all                        全部收起（启动台里不留任何图标）
 #   sudo ./segger-apps.sh restore                    把收起的全部移回原位
 #
 # 例
@@ -37,6 +38,8 @@ else
 fi
 HIDDEN="$APPROOT/.disabled-apps"
 
+# 备份文件放脚本同目录（.gitignore 已排除）。
+# 注意 restore 不依赖任何清单文件 —— 它直接扫隐藏目录，所以这里不需要额外清单。
 _src="${BASH_SOURCE[0]}"
 while [ -L "$_src" ]; do
   _link="$(readlink "$_src")"
@@ -46,7 +49,8 @@ while [ -L "$_src" ]; do
   esac
 done
 SCRIPT_DIR="$(cd "$(dirname "$_src")" && pwd)"
-MANIFEST="$SCRIPT_DIR/.segger-apps-hidden.txt"
+
+# 本脚本不写任何文件（restore 直接扫隐藏目录），所以不需要 chown 处理。
 
 # 默认保留：日常真正会打开的。按需增删。
 KEEP="JFlash.app
@@ -76,13 +80,14 @@ case "$MODE" in
     done
     ;;
 
-  check|minimal)
+  check|minimal|all)
     DRY=0; [ "$MODE" = check ] && DRY=1
+    # all = 一个都不留：适合"启动台里不想看到任何 J-Link 图标"的场景。
+    # 命令行工具（JLinkExe / *CLExe）不受影响，仍在 /usr/local/bin。
+    [ "$MODE" = all ] && KEEP=""
     [ -d "$APPROOT" ] || { echo "找不到 ${APPROOT}（用 SEGGER_APP_DIR 指定）" >&2; exit 1; }
     if [ "$DRY" = 0 ]; then
       mkdir -p "$HIDDEN"
-      : > "$MANIFEST"
-      fix_owner
     fi
     kept=0; hid=0
     for a in $(apps); do
@@ -91,7 +96,7 @@ case "$MODE" in
       else
         printf '  hide    %s\n' "$a"; hid=$((hid + 1))
         if [ "$DRY" = 0 ]; then
-          mv "$APPROOT/$a" "$HIDDEN/$a" && echo "$a" >> "$MANIFEST"
+          mv "$APPROOT/$a" "$HIDDEN/$a"
         fi
       fi
     done

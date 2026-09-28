@@ -53,7 +53,13 @@ JFlash.app"
 
 names() { ls "$BINDIR" 2>/dev/null | grep -E "$PATTERN"; }
 
-fix_owner() { [ -n "${SUDO_USER:-}" ] && chown "$SUDO_USER" "$BACKUP" 2>/dev/null; return 0; }
+fix_owner() {
+  # sudo / osascript 提权下都会以 root 创建文件，这里把它归回脚本目录的所有者
+  local owner
+  owner="${SUDO_USER:-$(stat -f %Su "$SCRIPT_DIR" 2>/dev/null || stat -c %U "$SCRIPT_DIR" 2>/dev/null)}"
+  [ -n "$owner" ] && [ "$owner" != "root" ] && chown "$owner" "$BACKUP" 2>/dev/null
+  return 0
+}
 
 write_backup() {
   cd "$BINDIR" || return 1
