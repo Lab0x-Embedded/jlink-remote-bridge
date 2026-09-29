@@ -71,8 +71,6 @@
 | 宿主 IP 变了 | `./jlink-remote-server.sh ip` 重查，改 IDE 里的 IP |
 | 能连上但下载报 flash 错误 | 检查 Flash 算法是否与芯片容量匹配 |
 
-更多实测踩坑记录见 [`docs/PITFALLS.md`](docs/PITFALLS.md)。
-
 ## 原理
 
 macOS / Linux 用的是**系统自带的通用 USB 栈**，探针不需要任何厂商驱动就能用 —— 所以在宿主机上一切正常。把探针留在宿主机，把它**通过网络借出去**即可：
