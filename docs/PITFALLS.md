@@ -80,7 +80,10 @@ JLinkExe -device STM32F407ZG -if SWD -speed 4000 -CommanderScript <(printf 'conn
 
 ## J-Link 远程相关的行为特点
 
+- **服务日志的时间戳是 UTC，不是本地时间** —— 比北京时间早 8 小时。排查时极容易把"刚刚发生的事"误判成"几小时前的旧记录"（踩过）。
 - 客户端 / 服务端**版本不一致不影响**（实测 V7.96 客户端 ↔ V9.80 服务端正常工作）。
 - 服务运行期间，**宿主本机的 `JLinkExe` 看不到探针**（USB 被独占）—— 这是正常的，不是故障。
+- **服务不是常驻进程**（没装 launchd）：Mac 休眠 / 重启之后需要重新 `start`。但探针拔插（USB 重新枚举）**不用重启服务** —— 它每 5 秒自动重连，日志会出现 `Retrying in 5 seconds...` 之后 `Connected to J-Link`。
 - 客户端连接串是 `IP <host>`，也可以在 Commander 里直接敲这个命令。
 - Keil MDK 只支持 J-Link 的 **LAN 模式**，不支持 tunnel 模式（tunnel 会报 `Cannot connect to J-Link via TCP/IP`）。
+- `localhost:19080` 那个 **J-Link 网页控制面板**是 DLL 自带模块，随任何 J-Link 软件启动而出现，**没有开关能单独禁用**（dylib 里只有内部 API `SuppressControlPanel`）。它只绑 `127.0.0.1`，无害；要它消失就停掉服务。
