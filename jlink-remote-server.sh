@@ -60,7 +60,8 @@ load_env
 PORT="${JLINK_REMOTE_PORT:-19020}"
 SN="${JLINK_SN:-}"
 BIN="${JLINK_REMOTE_BIN:-$(command -v JLinkRemoteServerCLExe 2>/dev/null || echo /usr/local/bin/JLinkRemoteServerCLExe)}"
-LOG="${JLINK_REMOTE_LOG:-${TMPDIR:-/tmp}/jlink_remote_server.log}"
+_tmpdir="${TMPDIR:-/tmp}"; _tmpdir="${_tmpdir%/}"        # TMPDIR 末尾带 /，去掉以免出现 // 的难看路径
+LOG="${JLINK_REMOTE_LOG:-${_tmpdir}/jlink_remote_server.log}"
 PAT="JLinkRemoteServerCLExe -Port $PORT"
 
 print_ip() {
@@ -114,17 +115,30 @@ else
   nohup "$BIN" -Port "$PORT" > "$LOG" 2>&1 &
 fi
 
-sleep 3
+sleep 1
+# 服务写日志有缓冲，固定 sleep 容易在日志还没刷出来时就报"就绪"，所以轮询等待
+ok=0; i=0
+while [ "$i" -lt 10 ]; do
+  if grep -q "Waiting for client connections" "$LOG" 2>/dev/null; then ok=1; break; fi
+  i=$((i + 1)); sleep 1
+done
+
 echo "启动完成，日志：$LOG"
 tail -5 "$LOG"
 echo
-if grep -q "Waiting for client connections" "$LOG"; then
+if [ "$ok" = 1 ]; then
   echo "✅ 服务就绪"
+  echo
+  print_ip
+  echo
+  echo "下一步：在 IDE（如 Keil µVision）里选 TCP/IP，IP 填上面那个，"
+  echo "        端口填 $PORT 或 0（0 = 走 J-Link 标准端口）。"
 else
-  echo "⚠️  日志里没有 'Waiting for client connections'，请检查上面几行报错" >&2
+  echo "⚠️  等了 10 秒还没等到 'Waiting for client connections'，日志见上。两种常见原因："
+  echo "    ① 探针没插好/没被识别 —— 宿主机上这样确认（命中数应为 1）："
+  echo "       ioreg -p IOUSB -l -w0 | grep -c '\"idVendor\" = 4966'"
+  echo "    ② 探针被直通给虚拟机了 —— 在虚拟机里断开它、归回宿主机。确认："
+  echo "       ioreg -p IOUSB -l -w0 | grep -A22 'kUSBProductString\" = \"J-Link\"' | grep UsbExclusiveOwner"
+  echo "       （出现 vmware-vmx 就是被虚拟机占着）"
+  echo "    两种情况都不用重启服务：探针一回来它会自动接上（每 5 秒重试）。"
 fi
-echo
-print_ip
-echo
-echo "下一步：在 IDE（如 Keil µVision）里选 TCP/IP，IP 填上面那个，"
-echo "        端口填 $PORT 或 0（0 = 走 J-Link 标准端口）。"
